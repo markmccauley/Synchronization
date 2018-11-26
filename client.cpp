@@ -30,11 +30,12 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#include "reqchannel.h"
+#include "FIFORequestChannel.h"
 #include "BoundedBuffer.h"
 #include "Histogram.h"
 #include <chrono>
 #include <csignal>
+
 using namespace std;
 
 // Global variables
@@ -43,8 +44,8 @@ Histogram hist;
 // create signal handler
 void signal_handler(int) {
     signal(SIGALRM, signal_handler);
-    //system("clear"); 
-    //hist.print();
+    system("clear"); 
+    hist.print();
     alarm(2);
 }
 
@@ -90,18 +91,18 @@ void* worker_thread_function(void* arg) {
         string request = args->request_buf->pop();
 		args->workerChannel->cwrite(request);
 
-		if(request == "quit") { // check for quit
+		if (request == "quit") { // check for quit
 			delete args->workerChannel; // properly handle worker channel
             break;
-        }else{
+        } else {
 			string response = args->workerChannel->cread(); // sort requests into respective buffers
-            if(request == "data John Smith"){ // check for John
+            if (request == "data John Smith"){ // check for John
                 args->response_buf1->push(response);
             }
-            else if(request == "data Jane Smith"){ // check for Jane
+            else if (request == "data Jane Smith"){ // check for Jane
                 args->response_buf2->push(response);
             }
-            else if(request == "data Joe Smith"){ // check for Joe
+            else if (request == "data Joe Smith"){ // check for Joe
                 args->response_buf3->push(response);
             }
 		}
@@ -128,13 +129,14 @@ int main(int argc, char * argv[]) {
     int n = 100; //default number of requests per "patient"
     int w = 1; //default number of worker threads
     int b = 1; // default capacity for BoundedBuffer
+    string i = "f"; // default ipc method is FIFO
     int opt = 0;
     
     // signal for handler
     signal(SIGALRM, signal_handler);
     alarm(2);
 
-    while ((opt = getopt(argc, argv, "n:w:b:")) != -1) {
+    while ((opt = getopt(argc, argv, "n:w:b:i:")) != -1) {
         switch (opt) {
             case 'n':
                 n = atoi(optarg);
@@ -145,6 +147,9 @@ int main(int argc, char * argv[]) {
             case 'b':
                 b = atoi(optarg);
                 break;
+            case 'i':
+                i = strdup(optarg);
+                break;
 			}
     }
 
@@ -154,14 +159,29 @@ int main(int argc, char * argv[]) {
 	}
 	else {
 
-        //cout << "n == " << n << endl;
-        //cout << "w == " << w << endl;
-        //cout << "b == " << b << endl;
+        cout << "n == " << n << endl;
+        cout << "w == " << w << endl;
+        cout << "b == " << b << endl;
+        cout << "i == " << i << endl;
 
-        //cout << "CLIENT STARTED:" << endl;
-        //cout << "Establishing control channel... " << flush;
-        RequestChannel *chan = new RequestChannel("control", RequestChannel::CLIENT_SIDE);
-        //cout << "done." << endl<< flush;
+        cout << "CLIENT STARTED:" << endl;
+        cout << "Establishing control channel... " << flush;
+
+        RequestChannel *chan = NULL;
+        if (i == "f") { // check for FIFO method
+            chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
+        }
+        /*else if (i == "q") { // check for MQ method
+            chan = new MQRequestChannel("control", RequestChannel::CLIENT_SIDE);
+        }
+        else if (i == "s") { // check for SHM method
+            chan = new SHMRequestChannel("control", RequestChannel::CLIENT_SIDE);*/
+        else { // invalid input
+            cout << "Ivalid method chosen, resorting to FIFO" << endl;
+            chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
+        }
+
+        cout << "done." << endl<< flush;
 
         pthread_t request_threads[3]; // initialize threads
         pthread_t worker_threads[w];
@@ -182,21 +202,32 @@ int main(int argc, char * argv[]) {
         struct timeval begin, end;
         gettimeofday(&begin, NULL);
     
-        for(int i = 0; i < 3; i++){ 
+        for (int i = 0; i < 3; i++) { // create request threads
             requests[i].n = n; // assign arguments
             requests[i].req = patients[i];
             requests[i].request_buf = &request_buf;
             pthread_create(&request_threads[i], NULL, request_thread_function, (void *) &requests[i]);
         } 
 
-        for(int i = 0; i < w; ++i){
+        for (int i = 0; i < w; ++i) { // create worker threads
             workers[i].request_buf = &request_buf; // assign arguments
             workers[i].response_buf1 = &request_buf1;
             workers[i].response_buf2 = &request_buf2;
             workers[i].response_buf3 = &request_buf3;
             chan->cwrite("newchannel");
 		    string s = chan->cread();
-            workers[i].workerChannel = new RequestChannel(s, RequestChannel::CLIENT_SIDE);
+
+            if (chan->get_method() == 'f') {
+                workers[i].workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
+            }
+            /*else if (chan->get_method() == 'q') {
+                workers[i].workerChannel = new MQRequestChannel(s, RequestChannel::CLIENT_SIDE);
+            }
+            else if (chan->get_method() == 's') {
+                workers[i].workerChannel = new SHMRequestChannel(s, RequestChannel::CLIENT_SIDE);*/
+            else {
+                workers[i].workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
+            }
             pthread_create(&worker_threads[i], NULL, worker_thread_function, (void *) &workers[i]);
         }
 
@@ -233,10 +264,10 @@ int main(int argc, char * argv[]) {
 
         chan->cwrite ("quit");
         delete chan;
-        //cout << "All Done!!!" << endl;
+        cout << "All Done!!!" << endl;
 
-        //system("clear");
-		//hist.print ();
+        system("clear");
+		hist.print ();
         cout <<  time  << endl;
     }
 }
