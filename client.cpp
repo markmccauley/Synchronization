@@ -5,7 +5,6 @@
     Date  : 2013/01/31
  */
 
-
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -31,6 +30,7 @@
 #include <pthread.h>
 
 #include "FIFORequestChannel.h"
+#include "MQRequestChannel.h"
 #include "BoundedBuffer.h"
 #include "Histogram.h"
 #include <chrono>
@@ -129,13 +129,14 @@ int main(int argc, char * argv[]) {
     int n = 100; //default number of requests per "patient"
     int w = 1; //default number of worker threads
     int b = 1; // default capacity for BoundedBuffer
-    string i = "f"; // default ipc method is FIFO
+    string i = "q"; // default ipc method is FIFO
     int opt = 0;
-    
-    // signal for handler
+
+    // register the custom signal handler for SIGALRM
     signal(SIGALRM, signal_handler);
     alarm(2);
 
+    // Commandline args parsing
     while ((opt = getopt(argc, argv, "n:w:b:i:")) != -1) {
         switch (opt) {
             case 'n':
@@ -155,7 +156,8 @@ int main(int argc, char * argv[]) {
 
     int pid = fork();
 	if (pid == 0){
-		execl("dataserver", (char*) NULL);
+        // Pass request channel type as argument
+		execl("dataserver", "dataserver", "-i", i.c_str(), (char*) NULL);
 	}
 	else {
 
@@ -166,21 +168,20 @@ int main(int argc, char * argv[]) {
 
         cout << "CLIENT STARTED:" << endl;
         cout << "Establishing control channel... " << flush;
-
-        RequestChannel *chan = NULL;
-        if (i == "f") { // check for FIFO method
+        RequestChannel *chan = nullptr;
+        if(i == "f"){
+            cout << "FIFO selected" << endl;
             chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
-        }
-        /*else if (i == "q") { // check for MQ method
+        } else if(i == "q"){
+            cout << "Message Queue selected" << endl;
             chan = new MQRequestChannel("control", RequestChannel::CLIENT_SIDE);
-        }
-        else if (i == "s") { // check for SHM method
+        /*} else if(i == "s"){
+            cout << "Shared Memory selected" << endl;
             chan = new SHMRequestChannel("control", RequestChannel::CLIENT_SIDE);*/
-        else { // invalid input
-            cout << "Ivalid method chosen, resorting to FIFO" << endl;
+        } else {
+            cout << "Fallback to FIFO" << endl;
             chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
         }
-
         cout << "done." << endl<< flush;
 
         pthread_t request_threads[3]; // initialize threads
@@ -198,16 +199,16 @@ int main(int argc, char * argv[]) {
         // array of patients requests
         string patients[3] = {"data John Smith", "data Jane Smith", "data Joe Smith"};
 
-        // start timer
-        struct timeval begin, end;
-        gettimeofday(&begin, NULL);
-    
         for (int i = 0; i < 3; i++) { // create request threads
             requests[i].n = n; // assign arguments
             requests[i].req = patients[i];
             requests[i].request_buf = &request_buf;
             pthread_create(&request_threads[i], NULL, request_thread_function, (void *) &requests[i]);
         } 
+
+       // start timer
+        struct timeval begin, end;
+        gettimeofday(&begin, NULL);
 
         for (int i = 0; i < w; ++i) { // create worker threads
             workers[i].request_buf = &request_buf; // assign arguments
@@ -217,19 +218,22 @@ int main(int argc, char * argv[]) {
             chan->cwrite("newchannel");
 		    string s = chan->cread();
 
+            RequestChannel *workerChannel = NULL;
             if (chan->get_method() == 'f') {
-                workers[i].workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
+                workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
             }
-            /*else if (chan->get_method() == 'q') {
-                workers[i].workerChannel = new MQRequestChannel(s, RequestChannel::CLIENT_SIDE);
+            else if (chan->get_method() == 'q') {
+                workerChannel = new MQRequestChannel(s, RequestChannel::CLIENT_SIDE);
             }
-            else if (chan->get_method() == 's') {
-                workers[i].workerChannel = new SHMRequestChannel(s, RequestChannel::CLIENT_SIDE);*/
+            /*else if (chan->get_method() == 's') {
+                workerChannel = new SHMRequestChannel(s, RequestChannel::CLIENT_SIDE);*/
             else {
-                workers[i].workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
+                workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
             }
+            workers[i].workerChannel = workerChannel;
             pthread_create(&worker_threads[i], NULL, worker_thread_function, (void *) &workers[i]);
         }
+
 
         stats[0].response_buf = &request_buf1; // assign respective buffers
         stats[1].response_buf = &request_buf2;

@@ -12,7 +12,7 @@
 
 #include "RequestChannel.h"
 #include "FIFORequestChannel.h"
-//#include "mqchannel.h"
+#include "MQRequestChannel.h"
 //#include "shmchannel.h"
 #include <pthread.h>
 using namespace std;
@@ -27,11 +27,13 @@ void process_newchannel(RequestChannel* _channel) {
 	string new_channel_name = "data" + to_string(nchannels) + "_";
 	_channel->cwrite(new_channel_name);
     RequestChannel* data_channel = nullptr;
-    if(_channel->get_method() == 'f'){
+    if (_channel->get_method() == 'f') {
         data_channel = new FIFORequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
-    /*} else if(_channel->get_type() == 'q'){
+    } 
+	else if (_channel->get_method() == 'q') {
         data_channel = new MQRequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
-    } else if(_channel->get_type() == 's'){
+    /*} 
+	else if (_channel->get_type() == 's') {
         data_channel = new SHMRequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);*/
     } else {
         data_channel = new FIFORequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
@@ -93,11 +95,13 @@ int main(int argc, char * argv[]) {
     // What channel do we need?
     if(i == "f"){
         control_channel = new FIFORequestChannel("control", RequestChannel::SERVER_SIDE);
-    /*} else if(i == "q"){
+    } 
+	else if (i == "q") {
         control_channel = new MQRequestChannel("control", RequestChannel::SERVER_SIDE);
-    } else if(i == "s"){
+    } 
+	/*else if(i == "s") {
         control_channel = new SHMRequestChannel("control", RequestChannel::SERVER_SIDE);*/
-    } else {
+    else {
         control_channel = new FIFORequestChannel("control", RequestChannel::SERVER_SIDE);
     }
 	handle_process_loop (control_channel);	
