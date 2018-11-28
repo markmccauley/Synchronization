@@ -31,6 +31,7 @@
 
 #include "FIFORequestChannel.h"
 #include "MQRequestChannel.h"
+#include "SHMRequestChannel.h"
 #include "BoundedBuffer.h"
 #include "Histogram.h"
 #include <chrono>
@@ -129,7 +130,7 @@ int main(int argc, char * argv[]) {
     int n = 100; //default number of requests per "patient"
     int w = 1; //default number of worker threads
     int b = 1; // default capacity for BoundedBuffer
-    string i = "q"; // default ipc method is FIFO
+    string i = "f"; // default ipc method is FIFO
     int opt = 0;
 
     // register the custom signal handler for SIGALRM
@@ -169,17 +170,15 @@ int main(int argc, char * argv[]) {
         cout << "CLIENT STARTED:" << endl;
         cout << "Establishing control channel... " << flush;
         RequestChannel *chan = nullptr;
-        if(i == "f"){
-            cout << "FIFO selected" << endl;
+        if (i == "f") {
             chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
-        } else if(i == "q"){
-            cout << "Message Queue selected" << endl;
+        }
+        else if (i == "q") {
             chan = new MQRequestChannel("control", RequestChannel::CLIENT_SIDE);
-        /*} else if(i == "s"){
-            cout << "Shared Memory selected" << endl;
-            chan = new SHMRequestChannel("control", RequestChannel::CLIENT_SIDE);*/
+        } 
+        else if (i == "s") {
+            chan = new SHMRequestChannel("control", RequestChannel::CLIENT_SIDE);
         } else {
-            cout << "Fallback to FIFO" << endl;
             chan = new FIFORequestChannel("control", RequestChannel::CLIENT_SIDE);
         }
         cout << "done." << endl<< flush;
@@ -225,9 +224,9 @@ int main(int argc, char * argv[]) {
             else if (chan->get_method() == 'q') {
                 workerChannel = new MQRequestChannel(s, RequestChannel::CLIENT_SIDE);
             }
-            /*else if (chan->get_method() == 's') {
-                workerChannel = new SHMRequestChannel(s, RequestChannel::CLIENT_SIDE);*/
-            else {
+            else if (chan->get_method() == 's') {
+                workerChannel = new SHMRequestChannel(s, RequestChannel::CLIENT_SIDE);
+            } else {
                 workerChannel = new FIFORequestChannel(s, RequestChannel::CLIENT_SIDE);
             }
             workers[i].workerChannel = workerChannel;
@@ -272,6 +271,6 @@ int main(int argc, char * argv[]) {
 
         system("clear");
 		hist.print ();
-        cout <<  time  << endl;
+        cout << time << "Microseconds" << endl;
     }
 }

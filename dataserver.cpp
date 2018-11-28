@@ -13,7 +13,7 @@
 #include "RequestChannel.h"
 #include "FIFORequestChannel.h"
 #include "MQRequestChannel.h"
-//#include "shmchannel.h"
+#include "SHMRequestChannel.h"
 #include <pthread.h>
 using namespace std;
 
@@ -32,9 +32,9 @@ void process_newchannel(RequestChannel* _channel) {
     } 
 	else if (_channel->get_method() == 'q') {
         data_channel = new MQRequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
-    /*} 
-	else if (_channel->get_type() == 's') {
-        data_channel = new SHMRequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);*/
+    } 
+	else if (_channel->get_method() == 's') {
+        data_channel = new SHMRequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
     } else {
         data_channel = new FIFORequestChannel(new_channel_name, RequestChannel::SERVER_SIDE);
     }
@@ -99,9 +99,9 @@ int main(int argc, char * argv[]) {
 	else if (i == "q") {
         control_channel = new MQRequestChannel("control", RequestChannel::SERVER_SIDE);
     } 
-	/*else if(i == "s") {
-        control_channel = new SHMRequestChannel("control", RequestChannel::SERVER_SIDE);*/
-    else {
+	else if(i == "s") {
+        control_channel = new SHMRequestChannel("control", RequestChannel::SERVER_SIDE);
+   	} else {
         control_channel = new FIFORequestChannel("control", RequestChannel::SERVER_SIDE);
     }
 	handle_process_loop (control_channel);	
